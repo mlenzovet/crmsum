@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="crmsum",
+    name="crmsum_",
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
-        # Здесь добавьте зависимости, если они есть
+        'natasha==1.6.0'
     ],
     author="Федор",
     author_email="",
