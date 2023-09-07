@@ -9,10 +9,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
-<<<<<<< HEAD
+
 env/
-=======
->>>>>>> ddff7da6fab90b26df5aeb1aa8046f3d682e57f1
+
 develop-eggs/
 dist/
 downloads/
