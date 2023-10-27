@@ -6,6 +6,9 @@ __pycache__/
 **/secrets.json
 **/refresh_token.txt
 **/access_token.txt
+events_table_06102023.ipynb
+events_table.ipynb
+
 
 # C extensions
 *.so
