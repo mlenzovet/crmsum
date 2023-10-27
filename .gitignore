@@ -7,7 +7,11 @@ __pycache__/
 **/refresh_token.txt
 **/access_token.txt
 events_table_06102023.ipynb
-events_table.ipynb
+**/events_table.ipynb
+events_good.csv
+
+
+
 
 
 # C extensions
