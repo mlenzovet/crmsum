@@ -20,17 +20,38 @@ class Vocabulary:
             self.subdomain = secrets["subdomain"]
             
             # информация обо всех контактах. Ключ - id контакта в системе. Значение - вся информация о контакте
-            self.contacts: Dict[int, dict] = self._create_contact_vocab()  
+            self._contacts: Dict[int, dict] = self._create_contact_vocab()  
             # информация обо всех компаниях. Ключ - id компании в системе. Значение - вся информация о компании 
-            self.companies: Dict[int, dict]  = self._create_companies_vocab() 
+            self._companies: Dict[int, dict]  = self._create_companies_vocab() 
             # информация обо всех сделках. Ключ - id сделки. Значение - вся информация о сделки
-            self.leads: Dict[int, dict]  = self._create_leads_vocab() 
+            self._lead_status: Dict[int, dict]  = self._create_leads_vocab() 
             # информация обо всех воронках. Ключ - id воронки. Значение - вся информация о воронке (включая id статусов)
-            self.piplines: Dict[int, dict]  =self._create_pipline_and_status_vocab()
+            self._piplines: Dict[int, dict]  =self._create_pipline_and_status_vocab()
             # информация обо всех менеджерах. Ключ - id менеджера. Значение - вся информация о менеджере
-            self.users: Dict[int, dict]  = self._create_users_vocab()
+            self._users: Dict[int, dict]  = self._create_users_vocab()
 
-
+        
+    @property
+    def contacts(self):
+        return {k:v['name'] for k,v in self._contacts.items()}
+    
+    @property
+    def companies(self):
+        return  {k:v['name'] for k,v in self._companies.items()}
+    
+    @property
+    def lead_status(self):
+        return  {k:v['statuses'] for k,v in self._piplines.items()}
+    
+    @property
+    def piplines(self):
+        return{k:v['name'] for k,v in self._piplines.items()}
+    
+    @property
+    def users(self):
+        return {k:v['name'] for k,v in self._users.items()}
+    
+    
     def _api_call(self, endpoint, page):
         headers = {
             'Authorization': f'Bearer {self.token_manager.get_access_token()}',
@@ -137,40 +158,6 @@ class Vocabulary:
                                             }
         return  pipe_id_to_pipe_info
     
-class DataRepresentation: 
-    """ 
-    Представление данных в "человеческом" виде
-    """
-    def __init__(self, token_manager, secrets):
-        """
-        df - итоговая таблица, содержащая всю информацию о задаче 
-        vocab - все словари аккаунта
-        """
-        self.vocab = Vocabulary(tokens.default_token_manager, secrets) 
-        self._processing()
-        
-    def _processing(self):
-        """
-        Подготовка словарей для мапинга в итоговую таблицу
-        """
-        self.entity_id = {k:v['name'] for k,v in self.vocab.leads.items()}
-        self.client = {k:v['name'] for k,v in self.vocab.contacts.items()}
-        self.company = {k:v['name'] for k,v in self.vocab.companies.items()}
-        self.pipline = {k:v['name'] for k,v in self.vocab.piplines.items()}
-        self.lead_status= {k:v['statuses'] for k,v in self.vocab.piplines.items()}
-        self.users = {k:v['name'] for k,v in self.vocab.users.items()}
-        
-    def __call__(self, df):
-        return df.assign(
-                created_at = df.created_at.apply(lambda timestamp: datetime.datetime.fromtimestamp(timestamp)),
-                created_by = df.responsible.apply(lambda cell: self.users.get(cell, None)),
-                entity_id = df.entity_id.apply(lambda cell: self.entity_id.get(cell, None)),
-                client = df.client.apply(lambda cell: self.client.get(cell, None)),
-                company = df.company.apply(lambda cell: self.company.get(cell, None)),
-                pipline = df.pipline.apply(lambda cell: self.pipline.get(cell, None)),
-                lead_status	= df.apply(lambda row: self.lead_status[row.pipline][row.lead_status] , axis=1),
-                responsible = df.responsible.apply(lambda cell: self.users.get(cell, None))
-            )
     
 class SpecificDataProcessing:
     """
