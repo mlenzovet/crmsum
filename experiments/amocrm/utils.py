@@ -1,10 +1,20 @@
-
+import datetime
 import numpy as np
 import pandas as pd
 import requests
 
 from typing import Dict, Optional
 import datetime 
+import logging
+from copy import copy 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class Vocabulary:
     def __init__(self, token_manager, secrets):
@@ -33,7 +43,7 @@ class Vocabulary:
         
     @property
     def contacts(self):
-        return {k:v['name'] for k,v in self._contacts.items()}
+        return {k:v['name'] for k,v in self._contacts.items() if v['name']!=None}
     
     @property
     def companies(self):
@@ -183,12 +193,14 @@ class SpecificDataProcessing:
         self.sale_field_changed_func = lambda row: row.specific_data['after'][0]['sale_field_value']['sale']
         self.lead_status_func = lambda row: row.specific_data['after'][0]['lead_status']['id']
         self.pipline_func = lambda row: row.specific_data['after'][0]['lead_status']['pipeline_id'] 
+        # self.entity_responsible_changed_func = lambda row: row.specific_data['after'][0]['responsible_user']['id']
         
+        # {'after': [{'responsible_user': {'id': 1531225}}]
         # начальная инициализация сквозных значений (sale, responsible_user_id, pipeline, lead_status)
         self.initial_func= lambda row: (row.specific_data['sale'], 
-                                        row.specific_data['responsible_user_id'],
                                         row.specific_data['pipeline'],
-                                        row.specific_data['lead_status'])
+                                        row.specific_data['lead_status'],
+                                        row.specific_data['responsible_user_id'])
         
         # сквозные поля датасета
         self.sale: Optional[float] = np.nan
@@ -213,7 +225,7 @@ class SpecificDataProcessing:
         
         # если это строка инициализации задачи
         if row.type == 'initial':
-            self.sale, self.responsible, self.pipline, self.lead_status = self.initial_func(row)
+            self.sale, self.pipline, self.lead_status,  self.responsible = self.initial_func(row)
         
         # если установили/изменили sale
         elif row.type == 'sale_field_changed':
@@ -226,11 +238,7 @@ class SpecificDataProcessing:
             elif row.specific_data['after'][0]['link']['entity']['type']=='company':
                 self.company = self.entity_linked_func(row)
                 
-        # если изменился статус/пайплайн задачи задачи
-        elif row.type=='lead_status_changed':
-            self.lead_status = self.lead_status_func(row)
-            self.pipline = self.pipline_func(row)
-
+            
         return pd.Series([self.contact, self.company, self.sale, self.lead_status, self.pipline, self.responsible])
     
     
@@ -249,6 +257,7 @@ class AmoCRM:
         self.subdomain = secrets["subdomain"]
         self.processor = SpecificDataProcessing
         self._general_fields = ['type', 'entity_id', 'created_by', 'created_at', 'specific_data']
+        self.vocab = Vocabulary(token_manager, secrets)
 
     def _api_call(self, endpoint, entity, entity_id):
         headers = {
@@ -411,14 +420,87 @@ class AmoCRM:
                                                 lead_status=None,
                                                 pipline=None,
                                                 responsible=None)
-        result[['client', 'company', 'sale', 'lead_status', 'pipline', 'responsible']] = result.apply(processor , axis=1)
+        result[['client', 'company', 'sale', 'lead_status', 'pipline', 'responsible']] = result.apply(processor, axis=1)
         
-        #print(result['created_at'][-3:])
+        # заполнить поля с изменением статусов, ответственны и цен
+        result= lead_status_changed_processing(result)  
+        result= responsible_user_processing(result)
+        result = sale_field_changed_processing(result)
+        
+        # привести дату к нужному формату
+        result['created_at'] = result['created_at'].apply(datetime.datetime.fromtimestamp)
+        
+        # заменить индексы на названия
+        for index, row in result.iterrows():
+            # создатель
+            result.loc[index, 'created_by'] = self.vocab .users.get(row.created_by, None)
+            # клиент 
+            if not pd.isna(row.client):
+                result.loc[index, 'client'] = self.vocab .contacts.get(int(row.client), None)
+            # компания
+            if not pd.isna(row.company):
+                result.loc[index, 'company'] = self.vocab .companies.get(int(row.company), None)
+            # воронка и статус сделки
+            pipline_id = row.pipline
+            result.loc[index, 'lead_status'] = self.vocab .lead_status[pipline_id].get(int(row.lead_status), None)
+            result.loc[index, 'pipline'] = self.vocab .piplines.get(int(row.pipline), None)
+            # ответственный
+            result.loc[index, 'responsible'] = self.vocab .users.get(int(row.responsible), None)
+         
+        return result   
 
-      
-        return result.astype({'client': pd.Int32Dtype(), 
-                              'company': pd.Int32Dtype(), 
-                              'sale': pd.Float32Dtype(),
-                              'lead_status': pd.Int32Dtype(),
-                              'pipline':pd.Int32Dtype(),
-                              'responsible':pd.Int32Dtype()})
+
+def lead_status_changed_processing(data):
+    """
+    Заполнить поле со статусом сделки
+    """
+    
+    row_start = 0
+    if 'lead_status_changed' in data.type.to_list():
+        for index, row in data.iterrows():
+            if row.type == 'lead_status_changed':
+                after = row['specific_data']['after'][0]['lead_status']['id']
+                before = row['specific_data']['before'][0]['lead_status']['id']
+                data.loc[row_start: index-1, 'lead_status'] = before
+                data.loc[index:, 'lead_status'] = after
+                row_start = index
+        
+    return data
+
+def responsible_user_processing(data):
+    """
+    Заполнить поле с ответственными
+    """
+    
+    row_start = 0
+    if 'entity_responsible_changed' in data.type.to_list():
+        for index, row in data.iterrows():
+            if row.type == 'entity_responsible_changed':
+                after = row['specific_data']['after'][0]['responsible_user']['id']
+                before = row['specific_data']['before'][0]['responsible_user']['id']
+                data.loc[row_start: index-1, 'responsible'] = before
+                data.loc[index:, 'responsible'] = after
+                row_start = index
+        
+    return data
+
+
+def sale_field_changed_processing(data):
+    """
+    Заполнить поле с ценой сделки
+    """
+    
+    row_start = 0
+    if 'sale_field_changed' in data.type.to_list():
+        for index, row in data.iterrows():
+            if row.type == 'sale_field_changed':
+                after = row['specific_data']['after'][0]['sale_field_value']['sale']
+                if len(row['specific_data']['before']) == 0:
+                    before = None
+                else:  
+                    before = row['specific_data']['before'][0]['sale_field_value']['sale']
+                data.loc[row_start: index-1, 'sale'] = before
+                data.loc[index:, 'sale'] = after
+                row_start = index
+        
+    return data
