@@ -8,6 +8,7 @@ __pycache__/
 **/access_token.txt
 **/events_table.ipynb
 events_good.csv
+.idea/
 
 
 
