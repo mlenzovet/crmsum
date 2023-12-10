@@ -442,8 +442,8 @@ class AmoCRM:
                 result.loc[index, 'company'] = self.vocab .companies.get(int(row.company), None)
             # воронка и статус сделки
             pipline_id = row.pipline
-            result.loc[index, 'lead_status'] = self.vocab .lead_status[pipline_id].get(int(row.lead_status), None)
-            result.loc[index, 'pipline'] = self.vocab .piplines.get(int(row.pipline), None)
+            result.loc[index, 'lead_status'] = self.vocab.lead_status[pipline_id].get(int(row.lead_status), None)
+            result.loc[index, 'pipline'] = self.vocab.piplines.get(int(row.pipline), None)
             # ответственный
             result.loc[index, 'responsible'] = self.vocab .users.get(int(row.responsible), None)
          
