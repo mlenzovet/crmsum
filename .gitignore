@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+key.txt
 **/secrets.json
 **/refresh_token.txt
 **/access_token.txt
