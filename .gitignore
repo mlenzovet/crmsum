@@ -3,14 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-key.txt
+openai.env
 **/secrets.json
 **/refresh_token.txt
 **/access_token.txt
 **/events_table.ipynb
 events_good.csv
 .idea/
-
+langchain_embeddings/
 
 
 
