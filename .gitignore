@@ -11,7 +11,7 @@ openai.env
 events_good.csv
 .idea/
 langchain_embeddings/
-openai.env
+
 
 
 
